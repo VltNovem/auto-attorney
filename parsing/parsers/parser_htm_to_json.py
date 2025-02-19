@@ -2,8 +2,8 @@ import os
 import json
 from bs4 import BeautifulSoup
 
-# Указываем путь к папке с файлами
-input_folder = "/mnt/data/"  # Если в Google Colab, то загрузи файлы вручную
+# Укажи точное имя файла
+input_file = "/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm"
 
 # Функция парсинга HTML в JSON
 def parse_law_html(file_path):
@@ -37,7 +37,7 @@ def parse_law_html(file_path):
 
     # Определяем имя выходного файла
     json_filename = os.path.splitext(os.path.basename(file_path))[0] + ".json"
-    output_path = os.path.join(input_folder, json_filename)
+    output_path = os.path.join("/content/", json_filename)
 
     # Сохраняем JSON
     with open(output_path, "w", encoding="utf-8") as json_file:
@@ -45,9 +45,7 @@ def parse_law_html(file_path):
     
     print(f"✅ Обработан: {file_path} → {json_filename}")
 
-# Обрабатываем все .htm файлы в папке
-for filename in os.listdir(input_folder):
-    if filename.endswith(".htm"):
-        parse_law_html(os.path.join(input_folder, filename))
+# Запускаем парсер для указанного файла
+parse_law_html(input_file)
 
-print("🎉 Парсинг завершен! Все файлы сохранены в JSON.")
+print("🎉 Парсинг завершен! JSON-файл сохранен в /content/")
