@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 # Укажи точное имя файла
 input_file = "/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm"
 
-# Функция парсинга HTML в JSON
+# Функция парсинга HTML в структурированный JSON
 def parse_law_html(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
         soup = BeautifulSoup(file, "html.parser")
@@ -16,23 +16,35 @@ def parse_law_html(file_path):
 
     # Получаем основной текст закона из <div id="article">
     article_div = soup.find("div", {"id": "article"})
-    text = article_div.get_text("\n").strip() if article_div else "Текст відсутній"
+    if not article_div:
+        print("❌ Не найден <div id='article'>. Парсинг невозможен.")
+        return
 
-    # Извлекаем номер и дату закона с учетом нового формата
+    # Извлекаем номер и дату закона
     law_number = "Невідомий номер"
     law_date = "Невідома дата"
-
     match = re.search(r"від (\d{2}\.\d{2}\.\d{4}) № ([\dIVXLCDM-]+)", title)
     if match:
-        law_date = match.group(1)  # Дата закона
-        law_number = match.group(2)  # Номер закона
+        law_date = match.group(1)
+        law_number = match.group(2)
+
+    # Обрабатываем содержимое, сохраняя структуру
+    content = []
+    for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
+        if element.name in ["h1", "h2", "h3"]:
+            content.append({"type": "heading", "level": int(element.name[1]), "text": element.text.strip()})
+        elif element.name == "p":
+            content.append({"type": "paragraph", "text": element.text.strip()})
+        elif element.name in ["ul", "ol"]:
+            list_items = [li.text.strip() for li in element.find_all("li")]
+            content.append({"type": "list", "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
         "title": title,
         "law_number": law_number,
         "law_date": law_date,
-        "text": text
+        "content": content
     }
 
     # Определяем имя выходного файла
