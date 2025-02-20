@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from bs4 import BeautifulSoup
 
 # Укажи точное имя файла
@@ -12,20 +13,19 @@ def parse_law_html(file_path):
 
     # Извлекаем название закона из <title>
     title = soup.find("title").text.strip() if soup.find("title") else "Без назви"
-    
+
     # Получаем основной текст закона из <div id="article">
     article_div = soup.find("div", {"id": "article"})
     text = article_div.get_text("\n").strip() if article_div else "Текст відсутній"
 
-    # Извлекаем номер и дату закона (из title)
+    # Извлекаем номер и дату закона с учетом нового формата
     law_number = "Невідомий номер"
     law_date = "Невідома дата"
-    title_parts = title.split(" - Закон № ")
-    if len(title_parts) > 1:
-        law_info = title_parts[1].split(" від ")
-        if len(law_info) == 2:
-            law_number = law_info[0].strip()
-            law_date = law_info[1].strip()
+
+    match = re.search(r"від (\d{2}\.\d{2}\.\d{4}) № ([\dIVXLCDM-]+)", title)
+    if match:
+        law_date = match.group(1)  # Дата закона
+        law_number = match.group(2)  # Номер закона
 
     # Создаем JSON-структуру
     law_data = {
