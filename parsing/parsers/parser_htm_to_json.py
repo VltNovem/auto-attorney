@@ -9,7 +9,7 @@ input_file = "/content/Про автомобільний транспорт - З
 # Функция парсинга HTML в JSON
 def parse_law_html(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
-        soup = BeautifulSoup(file, "lxml")
+        soup = BeautifulSoup(file, "html.parser")
 
     # Извлекаем название закона из <title>
     title = soup.find("title").text.strip() if soup.find("title") else "Без назви"
