@@ -50,9 +50,21 @@ def parse_law_html(file_path):
         
         # Определяем списки
         elif element.name in ["ul", "ol"]:
-            list_items = [li.get_text(strip=True) for li in element.find_all("li")]
-            if list_items:
-                content.append({"type": "list", "items": list_items})
+            def extract_list_items(ul_or_ol):
+               items = []
+               for li in ul_or_ol.find_all("li", recursive=False):  # Берем только верхний уровень
+                   sub_list = li.find(["ul", "ol"])  # Ищем вложенные списки
+                   if sub_list:
+                       items.append({
+                            "text": li.get_text(strip=True),
+                            "sub_list": extract_list_items(sub_list)  # Рекурсивный вызов
+                        })
+                   else:
+                        items.append(li.get_text(strip=True))
+             return items
+
+    list_items = extract_list_items(element)
+    content.append({"type": "list", "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
