@@ -61,7 +61,7 @@ def parse_law_html(file_path):
                         })
                    else:
                         items.append(li.get_text(strip=True))
-             return items
+                return items
 
     list_items = extract_list_items(element)
     content.append({"type": "list", "items": list_items})
