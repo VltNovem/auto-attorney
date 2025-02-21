@@ -32,12 +32,13 @@ def parse_law_html(file_path):
     content = []
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
         if element.name in ["h1", "h2", "h3"]:
-            content.append({"type": "heading", "level": int(element.name[1]), "text": element.text.strip()})
-        elif element.name == "p":
-            content.append({"type": "paragraph", "text": element.text.strip()})
+            content.append({"type": "heading", "level": int(element.name[1]), "text": element.get_text(strip=True)})
+        elif element.name == "p" and element.get_text(strip=True):
+            content.append({"type": "paragraph", "text": element.get_text(strip=True)})
         elif element.name in ["ul", "ol"]:
-            list_items = [li.text.strip() for li in element.find_all("li")]
-            content.append({"type": "list", "items": list_items})
+            list_items = [li.get_text(strip=True) for li in element.find_all("li")]
+            if list_items:
+                content.append({"type": "list", "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
