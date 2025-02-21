@@ -41,8 +41,10 @@ def parse_law_html(file_path):
         elif element.name == "p" and text:
             if re.match(r"^Стаття \d+", text):
                 content.append({"type": "article", "text": text})
-            elif re.match(r"^(Розділ|Глава) \d+", text):  # Определение разделов
-                content.append({"type": "chapter", "text": text})
+            elif re.match(r"^Розділ \d+", text):
+                content.append({"type": "heading", "level": 1, "text": text})
+            elif re.match(r"^Глава \d+", text):
+                content.append({"type": "heading", "level": 2, "text": text})
             else:
                 content.append({"type": "paragraph", "text": text})
         
