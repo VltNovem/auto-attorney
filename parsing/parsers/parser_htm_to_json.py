@@ -31,10 +31,22 @@ def parse_law_html(file_path):
     # Обрабатываем содержимое, сохраняя структуру
     content = []
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
+        text = element.get_text(strip=True)
+        
+        # Определяем заголовки
         if element.name in ["h1", "h2", "h3"]:
-            content.append({"type": "heading", "level": int(element.name[1]), "text": element.get_text(strip=True)})
-        elif element.name == "p" and element.get_text(strip=True):
-            content.append({"type": "paragraph", "text": element.get_text(strip=True)})
+            content.append({"type": "heading", "level": int(element.name[1]), "text": text})
+        
+        # Определяем статьи
+        elif element.name == "p" and text:
+            if re.match(r"^Стаття \d+", text):
+                content.append({"type": "article", "text": text})
+            elif re.match(r"^(Розділ|Глава) \d+", text):  # Определение разделов
+                content.append({"type": "chapter", "text": text})
+            else:
+                content.append({"type": "paragraph", "text": text})
+        
+        # Определяем списки
         elif element.name in ["ul", "ol"]:
             list_items = [li.get_text(strip=True) for li in element.find_all("li")]
             if list_items:
