@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 # Укажи точное имя файла
 input_file = "/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm"
 
-# Функция парсинга HTML в структурированный JSON
+# Функция для обработки HTML в структурированный JSON
 def parse_law_html(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
         soup = BeautifulSoup(file, "html.parser")
@@ -28,43 +28,44 @@ def parse_law_html(file_path):
         law_date = match.group(1)
         law_number = match.group(2)
 
+    # Функция для обработки вложенных списков
+    def extract_list_items(ul_or_ol):
+        items = []
+        for li in ul_or_ol.find_all("li", recursive=False):  # Берем только верхний уровень
+            sub_list = li.find(["ul", "ol"])  # Ищем вложенные списки
+            if sub_list:
+                items.append({
+                    "text": li.get_text(strip=True),
+                    "sub_list": extract_list_items(sub_list)  # Рекурсивный вызов
+                })
+            else:
+                items.append(li.get_text(strip=True))
+        return items
+
     # Обрабатываем содержимое, сохраняя структуру
     content = []
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
         text = element.get_text(strip=True)
-        
+
         # Определяем заголовки
         if element.name in ["h1", "h2", "h3"]:
             content.append({"type": "heading", "level": int(element.name[1]), "text": text})
-        
-        # Определяем статьи
+
+        # Определяем статьи и главы
         elif element.name == "p" and text:
             if re.match(r"^Стаття \d+", text):
                 content.append({"type": "article", "text": text})
             elif re.match(r"^Розділ \d+", text):
-                content.append({"type": "heading", "level": 1, "text": text})
+                content.append({"type": "heading", "level": 1, "text": text})  # Раздел
             elif re.match(r"^Глава \d+", text):
-                content.append({"type": "heading", "level": 2, "text": text})
+                content.append({"type": "heading", "level": 2, "text": text})  # Глава
             else:
                 content.append({"type": "paragraph", "text": text})
-        
+
         # Определяем списки
         elif element.name in ["ul", "ol"]:
-            def extract_list_items(ul_or_ol):
-               items = []
-               for li in ul_or_ol.find_all("li", recursive=False):  # Берем только верхний уровень
-                   sub_list = li.find(["ul", "ol"])  # Ищем вложенные списки
-                   if sub_list:
-                       items.append({
-                            "text": li.get_text(strip=True),
-                            "sub_list": extract_list_items(sub_list)  # Рекурсивный вызов
-                        })
-                   else:
-                        items.append(li.get_text(strip=True))
-                return items
-
-    list_items = extract_list_items(element)
-    content.append({"type": "list", "items": list_items})
+            list_items = extract_list_items(element)
+            content.append({"type": "list", "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
