@@ -62,7 +62,7 @@ def parse_law_html(file_path):
             else:
                 content.append({"type": "paragraph", "text": text})
 
-        # Определяем списки
+        # Определяем списки с учетом типа
         elif element.name in ["ul", "ol"]:
             list_type = "unordered" if element.name == "ul" else "ordered"
             list_items = extract_list_items(element)
