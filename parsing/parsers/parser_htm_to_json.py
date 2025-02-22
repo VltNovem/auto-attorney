@@ -44,29 +44,53 @@ def parse_law_html(file_path):
 
     # Обрабатываем содержимое, сохраняя структуру
     content = []
+    list_items = []  # Временный буфер для сбора списков
+
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
         text = element.get_text(strip=True)
 
         # Определяем заголовки
         if element.name in ["h1", "h2", "h3"]:
+            # Перед добавлением заголовка проверяем, не нужно ли закрыть список
+            if list_items:
+                content.append({"type": "list", "list_type": "unordered", "items": list_items})
+                list_items = []  # Очищаем буфер списка
             content.append({"type": "heading", "level": int(element.name[1]), "text": text})
 
         # Определяем статьи и главы
         elif element.name == "p" and text:
-            if re.match(r"^Стаття \d+", text):
-                content.append({"type": "article", "text": text})
-            elif re.match(r"^Розділ \d+", text):
-                content.append({"type": "heading", "level": 1, "text": text})  # Раздел
-            elif re.match(r"^Глава \d+", text):
-                content.append({"type": "heading", "level": 2, "text": text})  # Глава
+            # Проверяем, является ли элемент частью списка (если в нем есть <a name=nXXX>)
+            if element.find("a", {"name": re.compile(r"n\d+")}):
+                list_items.append(text)  # Добавляем в буфер списка
             else:
-                content.append({"type": "paragraph", "text": text})
+                # Если до этого был список, сначала закрываем его
+                if list_items:
+                    content.append({"type": "list", "list_type": "unordered", "items": list_items})
+                    list_items = []  # Очищаем буфер списка
+                # Добавляем обычный текст
+                if re.match(r"^Стаття \d+", text):
+                    content.append({"type": "article", "text": text})
+                elif re.match(r"^Розділ \d+", text):
+                    content.append({"type": "heading", "level": 1, "text": text})  # Раздел
+                elif re.match(r"^Глава \d+", text):
+                    content.append({"type": "heading", "level": 2, "text": text})  # Глава
+                else:
+                    content.append({"type": "paragraph", "text": text})
 
-        # Определяем списки с учетом типа
+        # Определяем списки, оформленные как <ul> или <ol>
         elif element.name in ["ul", "ol"]:
+            # Перед добавлением списка проверяем, не нужно ли закрыть текстовый список
+            if list_items:
+                content.append({"type": "list", "list_type": "unordered", "items": list_items})
+                list_items = []  # Очищаем буфер списка
             list_type = "unordered" if element.name == "ul" else "ordered"
             list_items = extract_list_items(element)
             content.append({"type": "list", "list_type": list_type, "items": list_items})
+            list_items = []  # Сбрасываем после добавления
+
+    # Если в конце обработки остался открытый список, добавляем его в контент
+    if list_items:
+        content.append({"type": "list", "list_type": "unordered", "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
