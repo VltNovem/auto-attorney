@@ -64,8 +64,9 @@ def parse_law_html(file_path):
 
         # Определяем списки
         elif element.name in ["ul", "ol"]:
+            list_type = "unordered" if element.name == "ul" else "ordered"
             list_items = extract_list_items(element)
-            content.append({"type": "list", "items": list_items})
+            content.append({"type": "list", "list_type": list_type, "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
