@@ -28,20 +28,6 @@ def parse_law_html(file_path):
         law_date = match.group(1)
         law_number = match.group(2)
 
-    # Функция для обработки вложенных списков
-    def extract_list_items(ul_or_ol):
-        items = []
-        for li in ul_or_ol.find_all("li", recursive=False):  # Берем только верхний уровень
-            sub_list = li.find(["ul", "ol"])  # Ищем вложенные списки
-            if sub_list:
-                items.append({
-                    "text": li.get_text(strip=True),
-                    "sub_list": extract_list_items(sub_list)  # Рекурсивный вызов
-                })
-            else:
-                items.append(li.get_text(strip=True))
-        return items
-
     # Обрабатываем содержимое, сохраняя структуру
     content = []
     list_items = []  # Временный буфер для сбора списков
@@ -49,44 +35,36 @@ def parse_law_html(file_path):
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
         text = element.get_text(strip=True)
 
+        # Проверяем, является ли элемент частью списка (<p class="rvps2">)
+        if element.name == "p" and element.get("class") == ["rvps2"]:
+            list_items.append(text)  # Добавляем в список
+            continue  # Переход к следующему элементу
+
+        # Если нашли не <p class="rvps2">, но у нас есть собранный список — закрываем его
+        if list_items:
+            content.append({"type": "list", "list_type": "unordered", "items": list_items})
+            list_items = []  # Очищаем буфер списка
+
         # Определяем заголовки
         if element.name in ["h1", "h2", "h3"]:
-            # Перед добавлением заголовка проверяем, не нужно ли закрыть список
-            if list_items:
-                content.append({"type": "list", "list_type": "unordered", "items": list_items})
-                list_items = []  # Очищаем буфер списка
             content.append({"type": "heading", "level": int(element.name[1]), "text": text})
 
         # Определяем статьи и главы
         elif element.name == "p" and text:
-            # Проверяем, является ли элемент частью списка (если в нем есть <a name=nXXX>)
-            if element.find("a", {"name": re.compile(r"n\d+")}):
-                list_items.append(text)  # Добавляем в буфер списка
+            if re.match(r"^Стаття \d+", text):
+                content.append({"type": "article", "text": text})
+            elif re.match(r"^Розділ \d+", text):
+                content.append({"type": "heading", "level": 1, "text": text})  # Раздел
+            elif re.match(r"^Глава \d+", text):
+                content.append({"type": "heading", "level": 2, "text": text})  # Глава
             else:
-                # Если до этого был список, сначала закрываем его
-                if list_items:
-                    content.append({"type": "list", "list_type": "unordered", "items": list_items})
-                    list_items = []  # Очищаем буфер списка
-                # Добавляем обычный текст
-                if re.match(r"^Стаття \d+", text):
-                    content.append({"type": "article", "text": text})
-                elif re.match(r"^Розділ \d+", text):
-                    content.append({"type": "heading", "level": 1, "text": text})  # Раздел
-                elif re.match(r"^Глава \d+", text):
-                    content.append({"type": "heading", "level": 2, "text": text})  # Глава
-                else:
-                    content.append({"type": "paragraph", "text": text})
+                content.append({"type": "paragraph", "text": text})
 
         # Определяем списки, оформленные как <ul> или <ol>
         elif element.name in ["ul", "ol"]:
-            # Перед добавлением списка проверяем, не нужно ли закрыть текстовый список
-            if list_items:
-                content.append({"type": "list", "list_type": "unordered", "items": list_items})
-                list_items = []  # Очищаем буфер списка
             list_type = "unordered" if element.name == "ul" else "ordered"
-            list_items = extract_list_items(element)
+            list_items = [li.get_text(strip=True) for li in element.find_all("li")]
             content.append({"type": "list", "list_type": list_type, "items": list_items})
-            list_items = []  # Сбрасываем после добавления
 
     # Если в конце обработки остался открытый список, добавляем его в контент
     if list_items:
