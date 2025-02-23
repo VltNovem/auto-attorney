@@ -30,45 +30,73 @@ def parse_law_html(file_path):
 
     # Обрабатываем содержимое, сохраняя структуру
     content = []
-    list_items = []  # Временный буфер для сбора списков
+    list_items = []  # Временный буфер для списков
+    list_type = None  # Тип списка (unordered или ordered)
 
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
         text = element.get_text(strip=True)
 
+        # Проверяем, является ли элемент заголовком (включая <p class="rvps3"> и <p class="rvps4">)
+        if element.name in ["h1", "h2", "h3"] or (element.name == "p" and element.get("class") in [["rvps3"], ["rvps4"]]):
+            if list_items:  # Закрываем список, если он был
+                content.append({"type": "list", "list_type": list_type, "items": list_items})
+                list_items = []  # Очищаем буфер
+            level = 1 if element.name == "h1" else (2 if element.name == "h2" else 3)
+            content.append({"type": "heading", "level": level, "text": text})
+
+        # Проверяем, является ли элемент статьей
+        elif element.name == "p" and re.match(r"^Стаття \d+", text):
+            if list_items:
+                content.append({"type": "list", "list_type": list_type, "items": list_items})
+                list_items = []
+            content.append({"type": "article", "text": text})
+
         # Проверяем, является ли элемент частью списка (<p class="rvps2">)
-        if element.name == "p" and element.get("class") == ["rvps2"]:
-            list_items.append(text)  # Добавляем в список
-            continue  # Переход к следующему элементу
+        elif element.name == "p" and element.get("class") == ["rvps2"]:
+            if not list_items:
+                list_type = "ordered" if re.match(r"^\d+[\.\)]", text) else "unordered"
+            list_items.append(text)
 
-        # Если нашли не <p class="rvps2">, но у нас есть собранный список — закрываем его
-        if list_items:
-            content.append({"type": "list", "list_type": "unordered", "items": list_items})
-            list_items = []  # Очищаем буфер списка
-
-        # Определяем заголовки
-        if element.name in ["h1", "h2", "h3"]:
-            content.append({"type": "heading", "level": int(element.name[1]), "text": text})
-
-        # Определяем статьи и главы
-        elif element.name == "p" and text:
-            if re.match(r"^Стаття \d+", text):
-                content.append({"type": "article", "text": text})
-            elif re.match(r"^Розділ \d+", text):
-                content.append({"type": "heading", "level": 1, "text": text})  # Раздел
-            elif re.match(r"^Глава \d+", text):
-                content.append({"type": "heading", "level": 2, "text": text})  # Глава
-            else:
-                content.append({"type": "paragraph", "text": text})
-
-        # Определяем списки, оформленные как <ul> или <ol>
+        # Проверяем, является ли элемент списком <ul> или <ol>
         elif element.name in ["ul", "ol"]:
+            if list_items:
+                content.append({"type": "list", "list_type": list_type, "items": list_items})
+                list_items = []
             list_type = "unordered" if element.name == "ul" else "ordered"
             list_items = [li.get_text(strip=True) for li in element.find_all("li")]
             content.append({"type": "list", "list_type": list_type, "items": list_items})
+            list_items = []
+
+        # Проверяем, является ли элемент поправкой (amendment)
+        elif re.search(r"(згідно із Законом № \d+-[IVXLCDM]+ від \d{2}\.\d{2}\.\d{4})", text):
+            if list_items:
+                content.append({"type": "list", "list_type": list_type, "items": list_items})
+                list_items = []
+            content.append({"type": "amendment", "text": text})
+
+        # Проверяем, является ли элемент ссылкой на другой закон (reference)
+        elif re.search(r"Законом № (\d+-[IVXLCDM]+) від (\d{2}\.\d{2}\.\d{4})", text):
+            match = re.search(r"Законом № (\d+-[IVXLCDM]+) від (\d{2}\.\d{2}\.\d{4})", text)
+            if list_items:
+                content.append({"type": "list", "list_type": list_type, "items": list_items})
+                list_items = []
+            content.append({
+                "type": "reference",
+                "law_number": match.group(1),
+                "law_date": match.group(2),
+                "text": text
+            })
+
+        # Если это обычный текст
+        else:
+            if list_items:
+                content.append({"type": "list", "list_type": list_type, "items": list_items})
+                list_items = []
+            content.append({"type": "paragraph", "text": text})
 
     # Если в конце обработки остался открытый список, добавляем его в контент
     if list_items:
-        content.append({"type": "list", "list_type": "unordered", "items": list_items})
+        content.append({"type": "list", "list_type": list_type, "items": list_items})
 
     # Создаем JSON-структуру
     law_data = {
