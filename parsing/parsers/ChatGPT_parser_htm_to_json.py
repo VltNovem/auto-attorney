@@ -33,6 +33,9 @@ def parse_law_html(file_path):
     list_items = []  # Временный буфер для списков
     list_type = None  # Тип списка (unordered или ordered)
 
+    # Регулярные выражения для определения типа списка
+    ordered_patterns = [r"^\d+\)", r"^\d+\.\d+", r"^\d+\.", r"^[а-я]\)"]  # 1), 1.1., 1., а)
+    
     for element in article_div.find_all(["h1", "h2", "h3", "p", "ul", "ol"]):
         text = element.get_text(strip=True)
 
@@ -53,8 +56,9 @@ def parse_law_html(file_path):
 
         # Проверяем, является ли элемент частью списка (<p class="rvps2">)
         elif element.name == "p" and element.get("class") == ["rvps2"]:
-            if not list_items:
-                list_type = "ordered" if re.match(r"^\d+[\.\)]", text) else "unordered"
+            is_ordered = any(re.match(pattern, text) for pattern in ordered_patterns)
+            if not list_items:  # Начало нового списка
+                list_type = "ordered" if is_ordered else "unordered"
             list_items.append(text)
 
         # Проверяем, является ли элемент списком <ul> или <ol>
