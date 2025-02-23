@@ -93,7 +93,14 @@ def extract_reference_details(reference):
     return law_number, law_date, text
 
 # Example usage
-html_content = open('law-examples/GitCopilot/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm', 'r', encoding='utf-8').read()
+file_path = '/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm'
+with open(file_path, 'r', encoding='utf-8') as html_file:
+    html_content = html_file.read()
+
 json_content = parse_html_to_json(html_content)
-with open('output.json', 'w', encoding='utf-8') as f:
-    f.write(json_content)
+
+output_path = '/content/output.json'
+with open(output_path, 'w', encoding='utf-8') as json_file:
+    json_file.write(json_content)
+
+print("Парсинг завершен. JSON сохранен в", output_path)
