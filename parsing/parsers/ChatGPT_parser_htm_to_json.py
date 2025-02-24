@@ -6,6 +6,10 @@ from bs4 import BeautifulSoup
 # Укажи точное имя файла
 input_file = "/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm"
 
+# Регулярные выражения для определения списков
+ordered_patterns = [r"^\d+\)", r"^\d+\.\d+", r"^[а-я]\)"]  # 1), 1.1., а)
+unordered_patterns = [r"^- ", r"• ", r"● "]  # Маркеры маркированных списков
+
 # Функция парсинга HTML в JSON
 def parse_law_html(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
@@ -62,10 +66,10 @@ def parse_law_html(file_path):
 
         # Обнаружение нумерованных и маркированных списков
         if element.name == "p" and "rvps2" in element.get("class", []):
-            match_numbered = re.match(r"^(\d+(\.\d+)*)\)", text)  # 1), 1.1), 1.2)
-            match_lettered = re.match(r"^([а-я])\)", text)  # а), б)
+            is_ordered = any(re.match(pattern, text) for pattern in ordered_patterns)
+            is_unordered = any(re.match(pattern, text) for pattern in unordered_patterns)
 
-            if match_numbered or match_lettered:
+            if is_ordered:
                 if not current_list or list_type != "ordered":
                     if current_list:
                         content.append({"type": "list", "list_type": list_type, "items": current_list})
@@ -73,13 +77,19 @@ def parse_law_html(file_path):
                     list_type = "ordered"
                 current_list.append(text)
 
-            else:
+            elif is_unordered:
                 if not current_list or list_type != "unordered":
                     if current_list:
                         content.append({"type": "list", "list_type": list_type, "items": current_list})
                     current_list = []
                     list_type = "unordered"
                 current_list.append(text)
+
+            else:
+                if current_list:
+                    content.append({"type": "list", "list_type": list_type, "items": current_list})
+                    current_list = None
+                content.append({"type": "paragraph", "text": text})
 
             continue
 
