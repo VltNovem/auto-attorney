@@ -9,7 +9,7 @@ input_file = "/content/Про автомобільний транспорт - З
 # Функция парсинга HTML в JSON
 def parse_law_html(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
-        soup = BeautifulSoup(file, "lxml")
+        soup = BeautifulSoup(file, "html.parser")
 
     # Извлекаем название закона из <title>
     title = soup.find("title").text.strip() if soup.find("title") else "Без назви"
@@ -44,20 +44,28 @@ def parse_law_html(file_path):
             content.append({"type": "heading", "level": 2, "text": text})
             continue
 
+        # Проверка изменений в законе
+        if "згідно із Законом" in text:
+            content.append({"type": "amendment", "text": text})
+            continue
+
+        # Проверка ссылок на законы
+        match_reference = re.search(r"Законом № (\d+-[IVXLCDM]+) від (\d{2}\.\d{2}\.\d{4})", text)
+        if match_reference:
+            content.append({
+                "type": "reference",
+                "law_number": match_reference.group(1),
+                "law_date": match_reference.group(2),
+                "text": text
+            })
+            continue
+
         # Обнаружение нумерованных и маркированных списков
         if element.name == "p" and "rvps2" in element.get("class", []):
             match_numbered = re.match(r"^(\d+(\.\d+)*)\)", text)  # 1), 1.1), 1.2)
             match_lettered = re.match(r"^([а-я])\)", text)  # а), б)
 
-            if match_numbered:
-                if not current_list or list_type != "ordered":
-                    if current_list:
-                        content.append({"type": "list", "list_type": list_type, "items": current_list})
-                    current_list = []
-                    list_type = "ordered"
-                current_list.append(text)
-
-            elif match_lettered:
+            if match_numbered or match_lettered:
                 if not current_list or list_type != "ordered":
                     if current_list:
                         content.append({"type": "list", "list_type": list_type, "items": current_list})
@@ -73,11 +81,6 @@ def parse_law_html(file_path):
                     list_type = "unordered"
                 current_list.append(text)
 
-            continue
-
-        # Проверка изменений в законе
-        if "згідно із Законом" in text:
-            content.append({"type": "amendment", "text": text})
             continue
 
         # Добавляем обычные параграфы
