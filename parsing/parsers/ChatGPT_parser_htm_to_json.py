@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 # Укажи точное имя файла
 input_file = "/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm"
 
-# Регулярные выражения для определения списков
+# Регулярные выражения для списков
 ordered_patterns = [r"^\d+\)", r"^\d+\.\d+", r"^[а-я]\)"]  # 1), 1.1., а)
 unordered_patterns = [r"^- ", r"• ", r"● "]  # Маркеры маркированных списков
 
@@ -33,7 +33,7 @@ def parse_law_html(file_path):
 
     # Разбираем содержимое
     content = []
-    current_list = None
+    current_list = []
     list_type = None
 
     for element in article_div.find_all(["p", "b", "a"]):
@@ -88,7 +88,7 @@ def parse_law_html(file_path):
             else:
                 if current_list:
                     content.append({"type": "list", "list_type": list_type, "items": current_list})
-                    current_list = None
+                    current_list = []
                 content.append({"type": "paragraph", "text": text})
 
             continue
