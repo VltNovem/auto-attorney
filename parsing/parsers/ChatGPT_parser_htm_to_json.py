@@ -1,78 +1,119 @@
 import os
 import json
+import re
 from bs4 import BeautifulSoup
 
 # Укажи точное имя файла
 input_file = "/content/Про автомобільний транспорт - Закон № 2344-III від 05.04.2001 - d81073-20241115.htm"
 
-# Функция для определения типа списка
-def detect_list_type(text):
-    text = text.strip()
-    if text.startswith(("1)", "2)", "3)", "4)", "5)")) or text[0].isdigit() and text[1] == ".":
-        return "ordered"
-    elif text.startswith(("а)", "б)", "в)", "г)", "д)")):
-        return "unordered"
-    return None
+# Регулярные выражения для списков
+ordered_patterns = [r"^\d+\)", r"^\d+\.\d+", r"^[а-я]\)"]  # 1), 1.1., а)
+unordered_patterns = [r"^- ", r"• ", r"● "]  # Маркеры маркированных списков
 
 # Функция парсинга HTML в JSON
 def parse_law_html(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
-        soup = BeautifulSoup(file, "lxml")
+        soup = BeautifulSoup(file, "html.parser")
 
+    # Извлекаем название закона из <title>
     title = soup.find("title").text.strip() if soup.find("title") else "Без назви"
 
+    # Извлекаем номер и дату закона
+    law_number = "Невідомий номер"
+    law_date = "Невідома дата"
+    title_match = re.search(r"№ (\d+-[IVX]+) від (\d{2}\.\d{2}\.\d{4})", title)
+    if title_match:
+        law_number, law_date = title_match.groups()
+
+    # Получаем основной текст закона
     article_div = soup.find("div", {"id": "article"})
-    paragraphs = article_div.find_all("p") if article_div else []
+    if not article_div:
+        print("⚠️ Основной текст закона не найден!")
+        return
 
+    # Разбираем содержимое
     content = []
-    current_list = None
+    current_list = []
+    list_type = None
 
-    for p in paragraphs:
-        text = p.get_text(strip=True)
-        
+    for element in article_div.find_all(["p", "b", "a"]):
+        text = element.get_text(strip=True)
+
+        # Пропускаем пустые элементы
         if not text:
             continue
-        
-        # Проверяем, является ли элемент списком
-        list_type = detect_list_type(text)
-        
-        if list_type:
-            if current_list and current_list["list_type"] == list_type:
-                current_list["items"].append(text)
-            else:
-                if current_list:
-                    content.append(current_list)
-                current_list = {
-                    "type": "list",
-                    "list_type": list_type,
-                    "items": [text]
-                }
-        else:
-            if current_list:
-                content.append(current_list)
-                current_list = None
+
+        # Обнаружение заголовков
+        if element.name == "b":
+            content.append({"type": "heading", "level": 2, "text": text})
+            continue
+
+        # Проверка ссылок на законы
+        match_reference = re.search(r"Законом № (\d+-[IVXLCDM]+) від (\d{2}\.\d{2}\.\d{4})", text)
+        if match_reference:
             content.append({
-                "type": "paragraph",
+                "type": "reference",
+                "law_number": match_reference.group(1),
+                "law_date": match_reference.group(2),
                 "text": text
             })
+            continue
 
+        # Обнаружение нумерованных и маркированных списков
+        if element.name == "p" and "rvps2" in element.get("class", []):
+            is_ordered = any(re.match(pattern, text) for pattern in ordered_patterns)
+            is_unordered = any(re.match(pattern, text) for pattern in unordered_patterns)
+
+            if is_ordered:
+                if not current_list or list_type != "ordered":
+                    if current_list:
+                        content.append({"type": "list", "list_type": list_type, "items": current_list})
+                    current_list = []
+                    list_type = "ordered"
+                current_list.append(text)
+
+            elif is_unordered:
+                if not current_list or list_type != "unordered":
+                    if current_list:
+                        content.append({"type": "list", "list_type": list_type, "items": current_list})
+                    current_list = []
+                    list_type = "unordered"
+                current_list.append(text)
+
+            else:
+                if current_list:
+                    content.append({"type": "list", "list_type": list_type, "items": current_list})
+                    current_list = []
+                content.append({"type": "paragraph", "text": text})
+
+            continue
+
+        # Добавляем обычные параграфы
+        content.append({"type": "paragraph", "text": text})
+
+    # Завершаем обработку последнего списка
     if current_list:
-        content.append(current_list)
+        content.append({"type": "list", "list_type": list_type, "items": current_list})
 
+    # Создаем JSON-структуру
     law_data = {
         "title": title,
-        "law_number": "2344-III",
-        "law_date": "05.04.2001",
+        "law_number": law_number,
+        "law_date": law_date,
         "content": content
     }
 
+    # Определяем имя выходного файла
     json_filename = os.path.splitext(os.path.basename(file_path))[0] + ".json"
     output_path = os.path.join("/content/", json_filename)
 
+    # Сохраняем JSON
     with open(output_path, "w", encoding="utf-8") as json_file:
         json.dump(law_data, json_file, ensure_ascii=False, indent=4)
-    
+
     print(f"✅ Обработан: {file_path} → {json_filename}")
 
+# Запускаем парсер для указанного файла
 parse_law_html(input_file)
+
 print("🎉 Парсинг завершен! JSON-файл сохранен в /content/")
