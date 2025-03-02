@@ -1,7 +1,7 @@
 import re
 import json
 from bs4 import BeautifulSoup, NavigableString
-import os  # Додаємо для роботи з файловою системою
+import os
 
 def parse_npa_html(html_file_path):
     try:
@@ -9,7 +9,7 @@ def parse_npa_html(html_file_path):
             html_content = f.read()
     except FileNotFoundError:
         print(f"Помилка: Файл '{html_file_path}' не знайдено!")
-        return None  # Повертаємо None, якщо файлу немає
+        return None
     except Exception as e:
         print(f"Помилка при читанні файлу '{html_file_path}': {e}")
         return None
@@ -40,11 +40,11 @@ def parse_npa_html(html_file_path):
         return json_data
 
     current_heading_levels = []
-    in_list = False
-    list_type = "unordered" #тип списку
+    in_list = False  # Чи знаходимося ми зараз всередині списку
+    list_type = "unordered"
 
-    for element in article_div.descendants:  # Обходимо *всіх* нащадків
-        if isinstance(element, NavigableString):  # Пропускаємо порожні текстові вузли
+    for element in article_div.descendants:
+        if isinstance(element, NavigableString):
             if element.strip() == "":
                 continue
 
@@ -53,118 +53,122 @@ def parse_npa_html(html_file_path):
             if not text:
                 continue
 
-             # --- Статьи (article) ---
+            # --- Статті (article) ---
             if text.startswith("Стаття"):
                 json_data['content'].append({
                     "type": "article",
                     "text": text
                 })
-                in_list = False #скидання
-                continue
+                in_list = False  # Скидаємо стан списку
+                continue # перехід на наступну ітерацію
 
-             # --- Поправки (amendment) и Ссылки (reference) ---
-            # (винесено перед обробкою списків, бо поправки можуть бути всередині списків)
+            # --- Поправки (amendment) і Посилання (reference) ---
+            # (винесено перед обробкою списків, бо поправки можуть бути *всередині* списків)
             if element.find('em') and ("згідно із Законом" in text or "змінено Законом" in text or "виключено згідно із Законом" in text):
-                 amendment_text = text
-                 match = re.search(r"(№\s*[\w\d/-]+)\s*(?:від\s*(\d{2}\.\d{2}\.\d{4}))?", amendment_text) # ?: для необов'язковості
-                 law_number = match.group(1) if match else None
-                 law_date = match.group(2) if match else None
-                 if law_number and law_date:
+                amendment_text = text
+                match = re.search(r"(№\s*[\w\d/-]+)\s*(?:від\s*(\d{2}\.\d{2}\.\d{4}))?", amendment_text)
+                law_number = match.group(1) if match else None
+                law_date = match.group(2) if match else None
+                if law_number and law_date:
                     json_data['content'].append({
                         "type": "reference",
                         "law_number": law_number,
                         "law_date": law_date,
                         "text": amendment_text
                     })
-                 else:
-                    json_data['content'].append({
-                         "type": "amendment",
-                         "text": amendment_text
-                     })
-                 in_list = False
-                 continue #переходимо до іншого тега
+                else: #якщо не вдалося витягнути номер
+                  json_data['content'].append({
+                      "type": "amendment",
+                      "text": amendment_text
+                })
+                in_list = False
+                continue
 
-            elif element.find('a', href=True):
+            elif element.find('a', href=True):  # Посилання
                 link = element.find('a')
                 href = link.get('href')
                 link_text = element.get_text(strip=True)
+
                 match = re.search(r"(№\s*[\w\d/-]+)\s*(?:від\s*(\d{2}\.\d{2}\.\d{4}))?", link_text)
                 law_number = match.group(1) if match else None
                 law_date = match.group(2) if match else None
+
+
                 json_data['content'].append({
-                  "type": "reference",
-                  "law_number": law_number,
-                  "law_date": law_date,
-                  "text": link_text,
-                  "url": href
-                 })
+                    "type": "reference",
+                    "law_number": law_number,
+                    "law_date": law_date,
+                    "text": link_text,
+                    "url": href
+                })
                 in_list = False
                 continue #переходимо до іншого тега
 
             # --- Списки (list) ---
-            elif 'rvps2' in element.get('class', []) or in_list:
-                # Перевіряємо наявність списку:
-                is_list_item = False
-                #перевірка чи є нумерація:
-                match_ordered = re.match(r'^\s*(\d+[\.\)]|\w\))', element.get_text(strip=True))
-                if match_ordered:
-                    is_list_item = True
-                    if not in_list: #якщо список тільки почався:
-                        list_type = "ordered"
+            is_list_item = False  # Прапорець, чи є поточний елемент елементом списку
 
-                #Якщо це елемент списку:
-                if 'rvps2' in element.get('class', []) or is_list_item:
-                    is_list_item = True
-                    if json_data['content'] and json_data['content'][-1]['type'] == 'list':
-                        # Якщо поточний елемент - частина списку, додаємо його
-                        list_item_text = element.get_text(strip=True)
-                        if list_item_text: #перевірка
-                            json_data['content'][-1]['items'].append(list_item_text)
-                    else:
-                      # Починаємо новий список
-                      list_type = "ordered" if match_ordered else "unordered" #визначення типу
-                      json_data['content'].append({
-                            "type": "list",
-                            "list_type": list_type,
-                            "items": [element.get_text(strip=True)]
-                      })
-                    in_list = True #ми в списку
-                    continue
-                else:
-                  in_list = False #якщо не частина списку, то скидуємо флаг
-                  json_data['content'].append({
-                    "type": "paragraph",
-                    "text": text
-                  })
-            # --- Обычные абзацы (paragraph) ---
+            # Перевірка, чи є нумерація (1., 1), а), і т.д.) або маркер (•, -, *)
+            if 'rvps2' in element.get('class', []):
+              is_list_item = True
             else:
-                json_data['content'].append({
+              prev_p = element.find_previous_sibling('p')
+              if prev_p and prev_p.get_text(strip=True).endswith(':'):
+                is_list_item = True
+              elif re.match(r'^\s*(\d+[\.\)]|\w\))', text): #перевірка на нумерацію
+                is_list_item = True
+
+
+            if is_list_item:  # Якщо це елемент списку
+                if in_list:
+                    # Якщо поточний елемент - частина списку, додаємо його
+                    list_item_text = text
+                    if list_item_text:
+                        json_data['content'][-1]['items'].append(list_item_text)
+                else:
+                  # Починаємо новий список
+                  list_type = "ordered" if re.match(r'^\s*(\d+[\.\)]|\w\))', text) else "unordered"
+                  json_data['content'].append({
+                        "type": "list",
+                        "list_type": list_type,
+                        "items": [text]
+                  })
+                in_list = True #зміна стану
+                continue  # Переходимо до наступного елемента
+
+            else:
+                in_list = False  # Скидаємо прапорець, якщо це не елемент списку
+                json_data['content'].append({  # Додаємо звичайний параграф
                     "type": "paragraph",
                     "text": text
                 })
-                in_list = False
+
 
         # --- Заголовки (heading) ---
         elif element.name == 'span' and 'rvts15' in element.get('class', []):
             heading_text = element.get_text(strip=True)
-            in_list = False #скидання
+            in_list = False
 
+            # Об'єднуємо текст, якщо є <br> всередині заголовка
             if element.find_next_sibling('br'):
-              next_span = element.find_next_sibling('span', class_='rvts15')
-              if next_span:
-                heading_text += " " + next_span.get_text(strip=True)
+                next_span = element.find_next_sibling('span', class_='rvts15')
+                if next_span:
+                    heading_text += " " + next_span.get_text(strip=True)
 
             if heading_text.startswith("Розділ"):
                 level = 1
             elif heading_text.startswith("Глава"):
                 level = 2
             else:
-                level = 3
-                parent_p = element.find_parent('p') #шукаємо батьківський
-                if parent_p and 'rvps7' in parent_p.get('class', []):
-                    level = 2
-                else:
-                  level = len(current_heading_levels) +1
+              # Перевірка на заголовки всередині <p class="rvps7">
+              level = 3
+              parent_p = element.find_parent('p')
+              if parent_p and 'rvps7' in parent_p.get('class', []):
+                  level = 2 #якщо є rvps7 то це глава
+              else:
+                  for ancestor in element.parents:
+                      if ancestor.name == 'p' and ancestor.find('span', class_='rvts15'): #шукаємо батьківський
+                          level = len(current_heading_levels) +1
+                          break
 
             current_heading_levels = current_heading_levels[:level - 1]
             current_heading_levels.append(heading_text)
@@ -176,26 +180,23 @@ def parse_npa_html(html_file_path):
             })
 
 
-
         # --- Таблицы (table) ---
         elif element.name == 'table':
-            in_list = False
+            in_list = False  # Скидаємо стан списку
             table_data = []
             for row in element.find_all('tr'):
                 row_data = []
                 for cell in row.find_all(['td', 'th']):
                     row_data.append(cell.get_text(strip=True))
-                if row_data:
-                  table_data.append(row_data)
-            if table_data:
-              json_data['content'].append({
-                  "type": "table",
-                  "data": table_data
-              })
-
+                if row_data:  # Додаємо, якщо рядок не порожній
+                    table_data.append(row_data)
+            if table_data:  # Якщо таблиця не порожня
+                json_data['content'].append({
+                    "type": "table",
+                    "data": table_data
+                })
 
     return json_data
-
 
 # --- Пример использования ---
 file_paths = [
